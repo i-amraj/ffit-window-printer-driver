@@ -49,7 +49,7 @@ jobs:
         run: |
           mkdir -p ffit-printer-windows-x64/bundle
           # Copy Flutter build outputs
-          cp -r ffit_printer_windows/build/windows/runner/Release/* ffit-printer-windows-x64/bundle/
+          cp -r ffit_printer_windows/build/windows/x64/runner/Release/* ffit-printer-windows-x64/bundle/
           # Copy Python service executable
           cp dist/ffit_service.exe ffit-printer-windows-x64/ffit_service.exe
           # Copy Installer assets
