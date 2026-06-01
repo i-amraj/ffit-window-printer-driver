@@ -1,0 +1,92 @@
+name: Build and Release FFit Windows Printer Driver
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '**.zip'
+      - '.gitignore'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter build
+        run: |
+          cd ffit_printer_windows
+          flutter pub get
+          flutter build windows --release
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          pip install pyinstaller Pillow PyMuPDF pyserial
+
+      - name: Compile Python Windows Service
+        run: |
+          pyinstaller --onefile --windowed --name=ffit_service windows_service/ffit_service.py
+
+      - name: Structure Standalone Windows Package
+        shell: bash
+        run: |
+          mkdir -p ffit-printer-windows-x64/bundle
+          # Copy Flutter build outputs
+          cp -r ffit_printer_windows/build/windows/runner/Release/* ffit-printer-windows-x64/bundle/
+          # Copy Python service executable
+          cp dist/ffit_service.exe ffit-printer-windows-x64/ffit_service.exe
+          # Copy Installer assets
+          cp installer/icon.png ffit-printer-windows-x64/icon.png
+          cp installer/install.ps1 ffit-printer-windows-x64/install.ps1
+
+      - name: Compress Windows Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ffit-printer-windows-x64 -DestinationPath ffit-printer-windows-x64.zip -Force
+          Remove-Item -Recurse -Force ffit-printer-windows-x64
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-binaries
+          path: ffit-printer-windows-x64.zip
+
+  publish:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-binaries
+          path: ./
+
+      - name: Commit and Push Release Packages
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ffit-printer-windows-x64.zip
+          git commit -m "chore: update compiled installation packages [skip ci]" || exit 0
+          git push origin main
